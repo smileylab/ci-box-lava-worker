@@ -19,7 +19,18 @@ ARG extra_packages="git iputils-ping"
 RUN apt-get -y -q update && apt-get -y -q --no-install-recommends install ${extra_packages}
 
 COPY configs/ /root/configs/
-RUN if [ -f /root/configs/lava-slave ]; then mv /root/configs/lava-slave /etc/lava-dispatcher/lava-slave; fi
+# Old worker /etc/lava-worker/config file ( < ver2021 )
+ARG version=latest
+RUN echo "$version" && case ${version} in \
+2021*) \
+echo "ver${verion}: copy lava-worker to /etc/lava-dispatcher/lava-worker"; \
+mv /root/configs/lava-worker /etc/lava-dispatcher/lava-worker; \
+;; \
+*) \
+echo "ver${version}: copy lava-slave to /etc/lava-dispatcher/lava-slave"; \
+mv /root/configs/lava-slave /etc/lava-dispatcher/lava-slave; \
+;; \
+esac;
 RUN if [ -f /root/configs/tftpd-hpa ]; then mv /root/configs/tftpd-hpa /etc/default/tftpd-hpa; fi
 
 # setup lava-coordinator
@@ -56,6 +67,7 @@ RUN if [ -f /root/configs/ser2net.conf ]; then mv /root/configs/ser2net.conf /et
 echo "deb http://deb.debian.org/debian/ sid main" >> /etc/apt/sources.list.d/sid.list && \
 apt-get -y -q update && apt-get -y -q --no-install-recommends install telnet ser2net && rm /etc/apt/sources.list.d/sid.list; fi && \
 sed -e 's,ser2net.yaml,ser2net.conf,g' -i /etc/default/ser2net
+
 # Caution to not use any port between the Linux dynamic port range: 32768-60999
 # sed replaces values in lava_common/constants.py
 RUN find /usr/lib/python3/dist-packages/ -iname constants.py | xargs sed -i 's,XNBD_PORT_RANGE_MIN.*,XNBD_PORT_RANGE_MIN=61950,'
@@ -137,14 +149,10 @@ sed -i 's,ing ${f}",ing ${f} ========== ",' /root/entrypoint.sh; fi
 #
 RUN apt-get -y -q update && apt-get -y -q --no-install-recommends install lavacli && rm -rf /var/cache/apk/*
 
+ARG version=latest
+ENV LAVA_VERSION=${version}
+
 EXPOSE 69/udp 80
-ARG server=lava-server
 
-# Old config file ( < 2021)
-RUN echo "MASTER_URL=\"tcp://${server}:5556\"" >> /etc/lava-dispatcher/lava-slave
-RUN echo "LOGGER_URL=\"tcp://${server}:5555\"" >> /etc/lava-dispatcher/lava-slave
-
-RUN echo "URL=\"http://${server}/\"" > /etc/lava-dispatcher/lava-worker
-
-ENTRYPOINT ["/root/entrypoint.sh"]
+CMD /root/entrypoint.sh && while [ true ]; do sleep 365d; done
 
