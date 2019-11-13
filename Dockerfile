@@ -1,3 +1,6 @@
+# originally based on debian:stretch-slim
+# with python3 debootstrap nfs-kernel-server qemu rpcbind ser2net telnet tftpd-hpa
+# u-boot-tools docker-ce-cli img2simg simg2img, etc
 ARG version=latest
 FROM lavasoftware/lava-dispatcher:${version}
 WORKDIR /opt/
@@ -10,30 +13,121 @@ RUN cd 96boards-uart/96boardsctl/ && cmake . && make
 
 FROM lavasoftware/lava-dispatcher:${version}
 
-ARG extra_packages=""
-RUN apt -q update || apt -q update
-RUN DEBIAN_FRONTEND=noninteractive apt-get -q -y install software-properties-common libftdi1
-RUN apt-add-repository non-free
-RUN apt -q update || apt -q update
-RUN DEBIAN_FRONTEND=noninteractive apt-get -q -y install ${extra_packages} net-tools snmp snmp-mibs-downloader
-RUN download-mibs
+# setup extra packages for whatever reason
+ARG extra_packages="git"
+RUN apt-get -y -q update && apt-get -y -q --no-install-recommends install ${extra_packages}
 
-# Add MIBs
+COPY configs/ /root/configs/
+RUN if [ -f /root/configs/lava-slave ]; then mv /root/configs/lava-slave /etc/lava-dispatcher/lava-slave; fi
+RUN if [ -f /root/configs/tftpd-hpa ]; then mv /root/configs/tftpd-hpa /etc/default/tftpd-hpa; fi
+
+# setup lava-coordinator
+RUN if [ -f /root/etc/lava-coordinator/lava-coordinator.conf ]; then mkdir -p /etc/lava-coordinator && \
+mv /root/configs/lava-coordinator/lava-coordinator.conf /etc/lava-coordinator && \
+apt-get -y -q update && apt-get -y -q --no-install-recommends install lava-coordinator; fi
+
+#
+# Setup Tools for Serial Console Control for the DUTs
+#
+# SNMP MIBS for Networked PDU Control
+# setup packages for using SNMP MIBS from non-free
+RUN echo "deb http://http.us.debian.org/debian/ stable non-free" >> /etc/apt/sources.list.d/non-free.list
+RUN apt-get -y -q update && apt-get -y -q --no-install-recommends install software-properties-common net-tools snmp snmp-mibs-downloader && rm /etc/apt/sources.list.d/non-free.list
+RUN download-mibs
+# Add MIBs for PowerNet428 (NetworkManagementCard 2 (NMC2)for ModularPDU)
 RUN mkdir -p /usr/share/snmp/mibs/
 ADD powernet428.mib /usr/share/snmp/mibs/
+# Add lava-lab (public-shared) scripts for Networked PDU Control
+ADD https://git.linaro.org/lava/lava-lab.git/plain/shared/lab-scripts/snmp_pdu_control /usr/local/bin/
+RUN chmod a+x /usr/local/bin/snmp_pdu_control
+ADD https://git.linaro.org/lava/lava-lab.git/plain/shared/lab-scripts/eth008_control /usr/local/bin/
+RUN chmod a+x /usr/local/bin/eth008_control
+#
+# cu conmux (is for console via conmux),
+# note: conmux need cu >= 1.07-24 See https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=336996
+RUN if [ -n "$(ls -1 /root/configs/conmux)" ]; then mv configs/conmux/*.conf /etc/conmux/ && \
+echo "deb http://deb.debian.org/debian/ testing main" >> /etc/apt/sources.list.d/testing.list && \
+apt-get -y -q update && apt-get -y -q --no-install-recommends install cu conmux && rm /etc/apt/sources.list.d/testing.list; fi
+#
+# telnet (is for using ser2net)
+# ser2net > 3.2 is only availlable from sid
+RUN if [ -f /root/configs/ser2net.conf ]; then mv /root/configs/ser2net.conf /etc/ && \
+echo "deb http://deb.debian.org/debian/ sid main" >> /etc/apt/sources.list.d/sid.list && \
+apt-get -y -q update && apt-get -y -q --no-install-recommends install telnet ser2net && rm /etc/apt/sources.list.d/sid.list; fi
+# Caution to not use any port between the Linux dynamic port range: 32768-60999
+# sed replaces values in lava_common/constants.py
+RUN find /usr/lib/python3/dist-packages/ -iname constants.py | xargs sed -i 's,XNBD_PORT_RANGE_MIN.*,XNBD_PORT_RANGE_MIN=61950,'
+RUN find /usr/lib/python3/dist-packages/ -iname constants.py | xargs sed -i 's,XNBD_PORT_RANGE_MAX.*,XNBD_PORT_RANGE_MAX=62000,'
+#
+# setup screen for terminal
+RUN if [ -f /root/configs/lava-screen.conf ]; then mv /root/configs/lava-screen.conf /root/ && \
+apt-get -y -q --no-install-recommends install screen; fi
+# ssh keys
+# setup ssh keys for PDU control over TechNexion's PowerControl daughter boards on pico-imx7d
 
-# Add lab scripts
-RUN mkdir -p /usr/local/lab-scripts/
-ADD https://git.linaro.org/lava/lava-lab.git/plain/shared/lab-scripts/snmp_pdu_control /usr/local/lab-scripts/
-RUN chmod a+x /usr/local/lab-scripts/snmp_pdu_control
-ADD https://git.linaro.org/lava/lava-lab.git/plain/shared/lab-scripts/eth008_control /usr/local/lab-scripts/
-RUN chmod a+x /usr/local/lab-scripts/eth008_control
+RUN if [ -f /root/configs/backup/ssh.tar.gz ]; then apt-get -y -q --no-install-recommends install openssh-server && \
+tar xzf /root/configs/backup/ssh.tar.gz && \
+rm -rf /root/configs/backup; else ssh-keygen -q -f /root/.ssh/id_rsa && \
+cat /root/.ssh/id_rsa.pub > /root/.ssh/authorized_keys; fi
+#
+# PXE
+# grub-efi-amd64-bin package if docker machine architecture is not amd64
+RUN if [ $(uname -m) != amd64 ]; then dpkg --add-architecture amd64 && apt-get update; fi
+RUN if [ -f /root/configs/grub.cfg ]; then mv /root/configs/grub.cfg /root/ && \
+apt-get -y -q --no-install-recommends install grub-efi-amd64-bin:amd64; fi
+RUN if [ $(uname -m) != amd64 ]; then dpkg --remove architecture amd64 && apt-get update; fi
 
-# Add 96boardsctl
-COPY --from=0 /opt/96boards-uart/96boardsctl/96boardsctl /usr/bin/
+# copy additional default settings for lava or other packages
+RUN if [ -n "$(ls -1 /root/configs/default)" ]; then mv /root/configs/default/* /etc/default/; fi
 
-ARG server=lava-server
-RUN echo "MASTER_URL=\"tcp://${server}:5556\"" >> /etc/lava-dispatcher/lava-slave
-RUN echo "LOGGER_URL=\"tcp://${server}:5555\"" >> /etc/lava-dispatcher/lava-slave
+# copy phyhostname to be used by setup.sh
+RUN if [ -f /root/configs/phyhostname ]; then mv /root/configs/phyhostname /root/; fi
 
-ENTRYPOINT ["/root/entrypoint.sh"]
+# copy over zmq_auth (scripts?) to etc/lava-dispatcher/certificates.d
+RUN if [ -n "$(ls -1 /root/configs/zmq_auth)" ]; then mv /root/configs/zmq_auth/* /etc/lava-dispatcher/certificates.d/; fi
+
+# copy other default lava-worker folders
+RUN mkdir -p /root/devices && if [ -n "$(ls -1 /root/configs/devices)" ]; then mv /root/configs/devices/* /root/devices/; fi
+RUN mkdir -p /root/tags && if [ -n "$(ls -1 /root/configs/tags)" ]; then mv /root/configs/tags/* /root/tags/; fi
+RUN mkdir -p /root/aliases && if [ -n "$(ls -1 /root/configs/aliases)" ]; then mv /root/configs/aliases/* /root/aliases/; fi
+RUN mkdir -p /root/deviceinfo/ && if [ -n "$(ls -1 /root/configs/deviceinfo)" ]; then mv /root/configs/deviceinfo/* /root/deviceinfo/; fi
+
+# remove all copied /root/configs/*
+RUN rm -rf /root/configs
+
+#
+# Patches, scripts and other stuff
+#
+# copy bash scripts (include extra_actions)
+COPY entrypoint.d/ /root/entrypoint.d/
+RUN chmod +x /root/entrypoint.d/*.sh
+COPY scripts/ /usr/local/bin/
+RUN chmod a+x /usr/local/bin/*
+
+# patch any lava patches to python3's dist-packages
+COPY lava-patch/ /root/lava-patch/
+RUN if [ -n $(ls -1 /root/lava-patch) ]; then apt-get -y -q --no-install-recommends install patch && \
+cd /usr/lib/python3/dist-packages && \
+for patch in $(ls /root/lava-patch/*patch); do patch -p1 < $patch || exit $?; done && \
+rm -rf /root/lava-patch; fi
+
+# needed for lavacli identities
+RUN mkdir -p /root/.config
+
+# execute the extra_actions (if it has been set)
+RUN if [ -x /usr/local/bin/extra_actions ]; then /usr/local/bin/extra_actions; fi
+
+# TODO: send this fix to upstream
+RUN if [ -f /root/entrypoint.sh ]; then \
+sed -i 's,find /root/entrypoint.d/ -type f,find /root/entrypoint.d/ -type f | sort,' /root/entrypoint.sh && \
+sed -i 's,echo "$0,echo "========== $0,' /root/entrypoint.sh && \
+sed -i 's,ing ${f}",ing ${f} ========== ",' /root/entrypoint.sh; fi
+
+#
+# lavacli - lava cli tool for setting up the lava-dispatcher
+#
+RUN apt-get -y -q update && apt-get -y -q --no-install-recommends install lavacli && rm -rf /var/cache/apk/*
+
+EXPOSE 69/udp 80
+
+CMD /root/entrypoint.sh && while [ true ]; do sleep 365d; done
