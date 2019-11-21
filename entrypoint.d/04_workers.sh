@@ -1,61 +1,13 @@
 #!/bin/bash
 
-if [ ! -e "/root/devices/$(hostname)" ];then
-	echo "Static slave for $LAVA_MASTER"
-	exit 0
-fi
+echo "===== Handle workers ====="
 
 if [ -z "$LAVA_MASTER_URI" ];then
 	echo "ERROR: Missing LAVA_MASTER_URI"
 	exit 11
 fi
-
-# Install PXE
-OPWD=$(pwd)
-cd /var/lib/lava/dispatcher/tmp && grub-mknetdir --net-directory=.
-cp /root/grub.cfg /var/lib/lava/dispatcher/tmp/boot/grub/
-cd $OPWD
-
-lavacli identities add --uri $LAVA_MASTER_BASEURI --token $LAVA_MASTER_TOKEN --username $LAVA_MASTER_USER default
-
-echo "Dynamic slave for $LAVA_MASTER ($LAVA_MASTER_URI)"
 LAVACLIOPTS="--uri $LAVA_MASTER_URI"
 
-# do a sort of ping for letting master to be up
-TIMEOUT=300
-while [ $TIMEOUT -ge 1 ];
-do
-	STEP=2
-	lavacli $LAVACLIOPTS device-types list >/dev/null
-	if [ $? -eq 0 ];then
-		TIMEOUT=0
-	else
-		echo "Wait for master...."
-		sleep $STEP
-	fi
-	TIMEOUT=$(($TIMEOUT-$STEP))
-done
-
-# This directory is used for storing device-types already added
-mkdir -p /root/.lavadocker/
-if [ -e /root/device-types ];then
-	for i in $(ls /root/device-types/*jinja2)
-	do
-		devicetype=$(basename $i |sed 's,.jinja2,,')
-		echo "Adding custom $devicetype"
-		lavacli $LAVACLIOPTS device-types list || exit $?
-		touch /root/.lavadocker/devicetype-$devicetype
-	done
-fi
-
-lavacli $LAVACLIOPTS device-types list > /tmp/device-types.list
-if [ $? -ne 0 ];then
-	exit 1
-fi
-lavacli $LAVACLIOPTS devices list -a > /tmp/devices.list
-if [ $? -ne 0 ];then
-	exit 1
-fi
 for worker in $(ls /root/devices/)
 do
 	lavacli $LAVACLIOPTS workers list |grep -q $worker
@@ -146,28 +98,4 @@ do
 		fi
 	done
 done
-
-for devicetype in $(ls /root/aliases/)
-do
-	lavacli $LAVACLIOPTS device-types aliases list $devicetype > /tmp/device-types-aliases-$devicetype.list
-	while read alias
-	do
-		grep -q " $alias$" /tmp/device-types-aliases-$devicetype.list
-		if [ $? -eq 0 ];then
-			echo "DEBUG: $alias for $devicetype already present"
-			continue
-		fi
-		echo "DEBUG: Add alias $alias to $devicetype"
-		lavacli $LAVACLIOPTS device-types aliases add $devicetype $alias || exit $?
-		echo " $alias" >> /tmp/device-types-aliases-$devicetype.list
-	done < /root/aliases/$devicetype
-done
-
-if [ -e /etc/lava-dispatcher/certificates.d/$(hostname).key ];then
-	echo "INFO: Enabling encryption"
-	sed -i 's,.*ENCRYPT=.*,ENCRYPT="--encrypt",' /etc/lava-dispatcher/lava-slave
-	sed -i "s,.*SLAVE_CERT=.*,SLAVE_CERT=\"--slave-cert /etc/lava-dispatcher/certificates.d/$(hostname).key_secret\"," /etc/lava-dispatcher/lava-slave
-	(cd /etc/lava-dispatcher/certificates.d; if [ -e master.key ]; then cp master.key $LAVA_MASTER.key; fi)
-	sed -i "s,.*MASTER_CERT=.*,MASTER_CERT=\"--master-cert /etc/lava-dispatcher/certificates.d/$LAVA_MASTER.key\"," /etc/lava-dispatcher/lava-slave
-fi
 exit 0
