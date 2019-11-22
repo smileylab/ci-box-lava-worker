@@ -11,10 +11,3 @@ services:
         server: "lava-server"
         extra_packages: "lava-coordinator"
     restart: always
-    devices:
-#     - /dev/kvm     # can be requested for qemu with hw accel
-      - /dev/net/tun # needed for QEMU
-    cap_add:
-      - NET_ADMIN    # needed for QEMU
-    volumes:
-      - ./overlays/etc/lava-coordinator/lava-coordinator.conf:/etc/lava-coordinator/lava-coordinator.conf
