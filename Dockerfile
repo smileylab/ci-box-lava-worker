@@ -62,13 +62,16 @@ RUN find /usr/lib/python3/dist-packages/ -iname constants.py | xargs sed -i 's,X
 # setup screen for terminal
 RUN if [ -f /root/configs/lava-screen.conf ]; then mv /root/configs/lava-screen.conf /root/ && \
 apt-get -y -q --no-install-recommends install screen; fi
+
 # ssh keys
 # setup ssh keys for PDU control over TechNexion's PowerControl daughter boards on pico-imx7d
-
 RUN if [ -f /root/configs/backup/ssh.tar.gz ]; then apt-get -y -q --no-install-recommends install openssh-server && \
 tar xzf /root/configs/backup/ssh.tar.gz && \
 rm -rf /root/configs/backup; else ssh-keygen -q -f /root/.ssh/id_rsa && \
 cat /root/.ssh/id_rsa.pub > /root/.ssh/authorized_keys; fi
+ARG ssh_server="10.88.88.12"
+RUN ssh-keyscan ${ssh_server} >> /root/.ssh/known_hosts
+
 #
 # PXE
 # grub-efi-amd64-bin package if docker machine architecture is not amd64
