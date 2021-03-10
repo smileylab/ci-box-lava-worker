@@ -53,7 +53,8 @@ apt-get -y -q update && apt-get -y -q --no-install-recommends install cu conmux 
 # ser2net > 3.2 is only availlable from sid
 RUN if [ -f /root/configs/ser2net.conf ]; then mv /root/configs/ser2net.conf /etc/ && \
 echo "deb http://deb.debian.org/debian/ sid main" >> /etc/apt/sources.list.d/sid.list && \
-apt-get -y -q update && apt-get -y -q --no-install-recommends install telnet ser2net && rm /etc/apt/sources.list.d/sid.list; fi
+apt-get -y -q update && apt-get -y -q --no-install-recommends install telnet ser2net && rm /etc/apt/sources.list.d/sid.list; fi && \
+sed -e 's,ser2net.yaml,ser2net.conf,g' -i /etc/default/ser2net
 # Caution to not use any port between the Linux dynamic port range: 32768-60999
 # sed replaces values in lava_common/constants.py
 RUN find /usr/lib/python3/dist-packages/ -iname constants.py | xargs sed -i 's,XNBD_PORT_RANGE_MIN.*,XNBD_PORT_RANGE_MIN=61950,'
