@@ -65,7 +65,7 @@ apt-get -y -q --no-install-recommends install screen; fi
 
 # ssh keys
 # setup ssh keys for PDU control over TechNexion's PowerControl daughter boards on pico-imx7d
-RUN if [ -f /root/configs/backup/ssh.tar.gz ]; then apt-get -y -q --no-install-recommends install openssh-server && \
+RUN if [ -f /root/configs/backup/ssh.tar.gz ]; then apt-get update && apt-get -y -q -f --install-suggests install openssh-server && \
 tar xzf /root/configs/backup/ssh.tar.gz && \
 rm -rf /root/configs/backup; else ssh-keygen -q -f /root/.ssh/id_rsa && \
 cat /root/.ssh/id_rsa.pub > /root/.ssh/authorized_keys; fi
