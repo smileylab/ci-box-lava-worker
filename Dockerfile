@@ -14,7 +14,7 @@ RUN cd 96boards-uart/96boardsctl/ && cmake . && make
 FROM lavasoftware/lava-dispatcher:${version}
 
 # setup extra packages for whatever reason
-ARG extra_packages="git"
+ARG extra_packages="git iputils-ping"
 RUN apt-get -y -q update && apt-get -y -q --no-install-recommends install ${extra_packages}
 
 COPY configs/ /root/configs/
@@ -70,8 +70,8 @@ RUN if [ -f /root/configs/backup/ssh.tar.gz ]; then apt-get update && apt-get -y
 tar xzf /root/configs/backup/ssh.tar.gz && \
 rm -rf /root/configs/backup; else ssh-keygen -q -f /root/.ssh/id_rsa && \
 cat /root/.ssh/id_rsa.pub > /root/.ssh/authorized_keys; fi
-ARG ssh_server="10.88.88.12"
-RUN ssh-keyscan ${ssh_server} >> /root/.ssh/known_hosts
+ARG pdu_server="10.88.88.12"
+RUN ping -W 1 -c 1 ${pdu_server} > /dev/null && ssh-keyscan ${pdu_server} >> /root/.ssh/known_hosts || :
 
 #
 # PXE
