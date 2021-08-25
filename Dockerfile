@@ -138,5 +138,13 @@ sed -i 's,ing ${f}",ing ${f} ========== ",' /root/entrypoint.sh; fi
 RUN apt-get -y -q update && apt-get -y -q --no-install-recommends install lavacli && rm -rf /var/cache/apk/*
 
 EXPOSE 69/udp 80
+ARG server=lava-server
 
-CMD /root/entrypoint.sh && while [ true ]; do sleep 365d; done
+# Old config file ( < 2021)
+RUN echo "MASTER_URL=\"tcp://${server}:5556\"" >> /etc/lava-dispatcher/lava-slave
+RUN echo "LOGGER_URL=\"tcp://${server}:5555\"" >> /etc/lava-dispatcher/lava-slave
+
+RUN echo "URL=\"http://${server}/\"" > /etc/lava-dispatcher/lava-worker
+
+ENTRYPOINT ["/root/entrypoint.sh"]
+
