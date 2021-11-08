@@ -1,7 +1,7 @@
 version: '2'
 
 services:
-  lava-worker:
+  lava-dispatcher:
     container_name: lava-worker0
     hostname: worker0
     build:
