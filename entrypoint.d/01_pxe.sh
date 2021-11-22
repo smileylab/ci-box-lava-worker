@@ -1,8 +1,10 @@
 #!/bin/bash
 
+echo "===== Check for static slave hostname from /root/devices/ ====="
+
 # check static slave for master
 if [ ! -e "/root/devices/$(hostname)" ];then
-	echo "Static slave for $LAVA_MASTER"
+	echo "ERROR: Specify static slave hostname for $LAVA_MASTER"
 	exit 1
 fi
 

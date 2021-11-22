@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "===== Handle workers ====="
+echo "===== Handle celery workers ====="
 
 if [ -z "$LAVA_MASTER_URI" ];then
 	echo "ERROR: Missing LAVA_MASTER_URI"
@@ -10,13 +10,16 @@ LAVACLIOPTS="--uri $LAVA_MASTER_URI"
 
 for worker in $(ls /root/devices/)
 do
-	lavacli $LAVACLIOPTS workers list |grep -q $worker
+	echo "Process $worker from /root/devices/"
+	lavacli $LAVACLIOPTS workers list | grep -q $worker
 	if [ $? -eq 0 ];then
 		echo "Remains of $worker, cleaning it"
 		/usr/local/bin/retire.sh $LAVA_MASTER_URI $worker
+		# retire.sh calls lavacli update to clean the worker
 		#lavacli $LAVACLIOPTS workers update $worker || exit $?
 	else
 		echo "Adding worker $worker"
+		# phyhostname is copied in from Dockerfile
 		lavacli $LAVACLIOPTS workers add --description "LAVA dispatcher on $(cat /root/phyhostname)" $worker || exit $?
 	fi
 	if [ ! -z "$LAVA_PDU_SERVER" ]; then
