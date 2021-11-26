@@ -70,8 +70,9 @@ RUN if [ -f /root/configs/backup/ssh.tar.gz ]; then apt-get update && apt-get -y
 tar xzf /root/configs/backup/ssh.tar.gz && \
 rm -rf /root/configs/backup; else ssh-keygen -q -f /root/.ssh/id_rsa && \
 cat /root/.ssh/id_rsa.pub > /root/.ssh/authorized_keys; fi
-ARG pdu_server="10.88.88.12"
-RUN ping -W 1 -c 1 ${pdu_server} > /dev/null && ssh-keyscan ${pdu_server} >> /root/.ssh/known_hosts || :
+
+ARG pdu_server=10.88.88.12
+RUN if [ -n "${pdu_server}" ]; then ping -W 3 -c 3 ${pdu_server} && ssh-keyscan ${pdu_server} >> /root/.ssh/known_hosts || :; fi
 
 #
 # PXE
