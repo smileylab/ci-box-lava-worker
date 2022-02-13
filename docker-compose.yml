@@ -8,7 +8,8 @@ services:
       context: ./
       args:
         version: 2020.02
-        server: "lava-server"
-        extra_packages: "lava-coordinator"
+        tgtplatform: linux/arm64
+        server: lava-server
+        extra_packages: lava-coordinator
         pdu_server: 192.168.11.35
     restart: always

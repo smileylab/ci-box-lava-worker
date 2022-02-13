@@ -2,7 +2,8 @@
 # with python3 debootstrap nfs-kernel-server qemu rpcbind ser2net telnet tftpd-hpa
 # u-boot-tools docker-ce-cli img2simg simg2img, etc
 ARG version=latest
-FROM lavasoftware/lava-dispatcher:${version}
+ARG tgtplatform=linux/arm64
+FROM --platform=${tgtplatform} lavasoftware/lava-dispatcher:${version}
 WORKDIR /opt/
 RUN apt -q update || apt -q update
 RUN DEBIAN_FRONTEND=noninteractive apt-get -q -y install build-essential git pkg-config cmake libusb-dev libftdi-dev
@@ -11,7 +12,7 @@ RUN git clone https://github.com/96boards/96boards-uart.git
 RUN cd 96boards-uart && git checkout 1d2bc993083d97b54d21ecdf72556066efce11f7
 RUN cd 96boards-uart/96boardsctl/ && cmake . && make
 
-FROM lavasoftware/lava-dispatcher:${version}
+FROM --platform=${tgtplatform} lavasoftware/lava-dispatcher:${version}
 
 # setup extra packages for whatever reason
 ARG extra_packages="git iputils-ping"
