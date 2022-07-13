@@ -82,6 +82,8 @@ RUN if [ $(uname -m) != amd64 ]; then dpkg --add-architecture amd64 && apt-get u
 RUN if [ -f /root/configs/grub.cfg ]; then mv /root/configs/grub.cfg /root/ && \
 apt-get -y -q --no-install-recommends install grub-efi-amd64-bin:amd64; fi
 RUN if [ $(uname -m) != amd64 ]; then dpkg --remove architecture amd64 && apt-get update; fi
+# intel.efi(iPXE) binary (pre-build by yocto)
+RUN if [ -f /root/configs/intel.efi ]; then mv /root/configs/intel.efi /root/; else echo "WARN: no intel.efi(iPXE) found for uefi BIOS PXE boot"; fi
 
 # copy additional default settings for lava or other packages
 RUN if [ -n "$(ls -1 /root/configs/default)" ]; then mv /root/configs/default/* /etc/default/; fi

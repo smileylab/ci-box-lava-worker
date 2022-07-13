@@ -11,5 +11,6 @@ echo "===== Handle PXE (grub settings) ====="
 OPWD=$(pwd)
 cd /var/lib/lava/dispatcher/tmp && grub-mknetdir --net-directory=.
 cp /root/grub.cfg /var/lib/lava/dispatcher/tmp/boot/grub/
+cp /root/intel.efi /var/lib/lava/dispatcher/tmp/
 cd $OPWD
 exit 0
