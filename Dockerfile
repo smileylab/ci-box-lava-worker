@@ -68,12 +68,13 @@ apt-get -y -q --no-install-recommends install screen; fi
 # ssh keys
 # setup ssh keys for PDU control over TechNexion's PowerControl daughter boards on pico-imx7d
 RUN if [ -f /root/configs/backup/ssh.tar.gz ]; then apt-get update && apt-get -y -q -f --install-suggests install openssh-server && \
-tar xzf /root/configs/backup/ssh.tar.gz && \
+tar xzf /root/configs/backup/ssh.tar.gz && chown root:root -R /root/.ssh && \
+chmod 600 /root/.ssh/id_rsa && chmod 644 /root/.ssh/id_rsa.pub && \
 rm -rf /root/configs/backup; else ssh-keygen -q -f /root/.ssh/id_rsa && \
 cat /root/.ssh/id_rsa.pub > /root/.ssh/authorized_keys; fi
 
 ARG pdu_server=10.88.88.12
-RUN if [ -n "${pdu_server}" ]; then ping -W 3 -c 3 ${pdu_server} && ssh-keyscan ${pdu_server} >> /root/.ssh/known_hosts || :; fi
+ENV LAVA_PDU_SERVER ${pdu_server}
 
 #
 # PXE

@@ -19,6 +19,11 @@ do
 		echo "Adding worker $worker"
 		lavacli $LAVACLIOPTS workers add --description "LAVA dispatcher on $(cat /root/phyhostname)" $worker || exit $?
 	fi
+	if [ ! -z "$LAVA_PDU_SERVER" ]; then
+		echo "Adding ssh key scan of pdu server to .ssh/known_hosts on $worker"
+		ssh-keygen -R $LAVA_PDU_SERVER -f $(whoami)/.ssh/known_hosts
+		ping -c 3 $LAVA_PDU_SERVER && mkdir -p $(whoami)/.ssh && ssh-keyscan $LAVA_PDU_SERVER >> $(whoami)/.ssh/known_hosts || exit $?
+	fi
 	if [ ! -z "$LAVA_DISPATCHER_IP" ];then
 		echo "Add dispatcher_ip $LAVA_DISPATCHER_IP to $worker"
 		/usr/local/bin/setdispatcherip.py $LAVA_MASTER_URI $worker $LAVA_DISPATCHER_IP || exit $?
