@@ -2,14 +2,26 @@ version: '2'
 
 services:
   lava-dispatcher:
-    container_name: lava-worker0
+    container_name: lava-dispatcher
     hostname: worker0
     build:
       context: ./
       args:
-        version: 2020.02
+        version: 2022.03
+        tgtplatform: linux/amd64
+        server: lava-server
+        extra_packages: lava-coordinator
+        pdu_server: 192.168.0.100
+    restart: always
+  lava-dispatcher-rpi3:
+    container_name: lava-dispatcher-rpi3
+    hostname: worker0
+    build:
+      context: ./
+      args:
+        version: 2022.03
         tgtplatform: linux/arm64
         server: lava-server
         extra_packages: lava-coordinator
-        pdu_server: 192.168.11.35
+        pdu_server: 192.168.0.100
     restart: always
