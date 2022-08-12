@@ -1,31 +1,110 @@
 #!/bin/bash
 
-echo "===== Handle celery workers ====="
+if [ ! -e "/root/devices/$(hostname)" ];then
+	echo "Static slave for $LAVA_MASTER"
+	exit 0
+fi
+
+. /root/setupenv
 
 if [ -z "$LAVA_MASTER_URI" ];then
 	echo "ERROR: Missing LAVA_MASTER_URI"
 	exit 11
 fi
+
+# Install PXE
+OPWD=$(pwd)
+cd /var/lib/lava/dispatcher/tmp && grub-mknetdir --net-directory=.
+cp /root/grub.cfg /var/lib/lava/dispatcher/tmp/boot/grub/
+cd $OPWD
+
+lavacli identities add --uri $LAVA_MASTER_BASEURI --token $LAVA_MASTER_TOKEN --username $LAVA_MASTER_USER default
+
+echo "Dynamic slave for $LAVA_MASTER ($LAVA_MASTER_URI)"
 LAVACLIOPTS="--uri $LAVA_MASTER_URI"
 
+# do a sort of ping for letting master to be up
+TIMEOUT=1200
+while [ $TIMEOUT -ge 1 ];
+do
+	STEP=2
+	lavacli $LAVACLIOPTS device-types list >/dev/null
+	if [ $? -eq 0 ];then
+		TIMEOUT=0
+	else
+		echo "Wait for master.... (${TIMEOUT}s remains)"
+		sleep $STEP
+	fi
+	TIMEOUT=$(($TIMEOUT-$STEP))
+done
+
+# This directory is used for storing device-types already added
+mkdir -p /root/.lavadocker/
+if [ -e /root/device-types ];then
+	for i in $(ls /root/device-types/*jinja2)
+	do
+		devicetype=$(basename $i |sed 's,.jinja2,,')
+		echo "Adding custom $devicetype"
+		lavacli $LAVACLIOPTS device-types list || exit $?
+		touch /root/.lavadocker/devicetype-$devicetype
+	done
+fi
+
+lavacli $LAVACLIOPTS device-types list > /tmp/device-types.list
+if [ $? -ne 0 ];then
+	echo "ERROR: fail to list device-types"
+	exit 1
+fi
+lavacli $LAVACLIOPTS devices list -a > /tmp/devices.list
+if [ $? -ne 0 ];then
+	echo "ERROR: fail to list devices"
+	exit 1
+fi
 for worker in $(ls /root/devices/)
 do
-	echo "Process $worker from /root/devices/"
-	lavacli $LAVACLIOPTS workers list | grep -q $worker
+	lavacli $LAVACLIOPTS workers list |grep -q $worker
 	if [ $? -eq 0 ];then
 		echo "Remains of $worker, cleaning it"
 		/usr/local/bin/retire.sh $LAVA_MASTER_URI $worker
-		# retire.sh calls lavacli update to clean the worker
 		#lavacli $LAVACLIOPTS workers update $worker || exit $?
 	else
 		echo "Adding worker $worker"
-		# phyhostname is copied in from Dockerfile
 		lavacli $LAVACLIOPTS workers add --description "LAVA dispatcher on $(cat /root/phyhostname)" $worker || exit $?
+		# does we ran 2020.09+ and worker need a token
 	fi
-	if [ ! -z "$LAVA_PDU_SERVER" ]; then
-		echo "Adding ssh key scan of pdu server to .ssh/known_hosts on $worker"
-		ssh-keygen -R $LAVA_PDU_SERVER -f $(whoami)/.ssh/known_hosts
-		ping -c 3 $LAVA_PDU_SERVER && mkdir -p $(whoami)/.ssh && ssh-keyscan $LAVA_PDU_SERVER >> $(whoami)/.ssh/known_hosts || exit $?
+	grep -q "TOKEN" /root/entrypoint.sh
+	if [ $? -eq 0 ];then
+		# This is 2020.09+
+		echo "DEBUG: Worker need a TOKEN"
+		if [ -z "$LAVA_WORKER_TOKEN" ];then
+			echo "DEBUG: get token dynamicly"
+			# Does not work on 2020.09, since token was not added yet in RPC2
+			WTOKEN=$(getworkertoken.py $LAVA_MASTER_URI $worker)
+			if [ $? -ne 0 ];then
+				echo "ERROR: cannot get WORKER TOKEN"
+				exit 1
+			fi
+			if [ -z "$WTOKEN" ];then
+				echo "ERROR: got an empty token"
+				exit 1
+			fi
+		else
+			echo "DEBUG: got token from env"
+			WTOKEN=$LAVA_WORKER_TOKEN
+		fi
+		echo "DEBUG: write token in /var/lib/lava/dispatcher/worker/"
+		mkdir -p /var/lib/lava/dispatcher/worker/
+		echo "$WTOKEN" > /var/lib/lava/dispatcher/worker/token
+		# lava worker ran under root
+		chown root:root /var/lib/lava/dispatcher/worker/token
+		chmod 640 /var/lib/lava/dispatcher/worker/token
+		sed -i "s,.*TOKEN.*,TOKEN=\"--token-file /var/lib/lava/dispatcher/worker/token\"," /etc/lava-dispatcher/lava-worker || exit $?
+
+		echo "DEBUG: set master URL to $LAVA_MASTER_URL"
+		sed -i "s,^# URL.*,URL=\"$LAVA_MASTER_URL\"," /etc/lava-dispatcher/lava-worker || exit $?
+		cat /etc/lava-dispatcher/lava-worker
+	else
+		echo "DEBUG: Worker does not need a TOKEN"
 	fi
 	if [ ! -z "$LAVA_DISPATCHER_IP" ];then
 		echo "Add dispatcher_ip $LAVA_DISPATCHER_IP to $worker"
@@ -106,4 +185,21 @@ do
 		fi
 	done
 done
+
+for devicetype in $(ls /root/aliases/)
+do
+	lavacli $LAVACLIOPTS device-types aliases list $devicetype > /tmp/device-types-aliases-$devicetype.list
+	while read alias
+	do
+		grep -q " $alias$" /tmp/device-types-aliases-$devicetype.list
+		if [ $? -eq 0 ];then
+			echo "DEBUG: $alias for $devicetype already present"
+			continue
+		fi
+		echo "DEBUG: Add alias $alias to $devicetype"
+		lavacli $LAVACLIOPTS device-types aliases add $devicetype $alias || exit $?
+		echo " $alias" >> /tmp/device-types-aliases-$devicetype.list
+	done < /root/aliases/$devicetype
+done
+
 exit 0
