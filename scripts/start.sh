@@ -9,11 +9,14 @@ fi
 
 echo "LOGFILE=/var/log/lava-dispatcher/lava-slave.log" >> /etc/lava-dispatcher/lava-slave
 
+
+echo "===== Start tftpd service ($0) ====="
 service tftpd-hpa start || exit 4
 if [ -s /etc/ser2net.conf ];then
 	service ser2net start || exit 7
 fi
 
+echo "===== Start conmux registry ($0) ====="
 touch /var/run/conmux-registry
 /usr/sbin/conmux-registry 63000 /var/run/conmux-registry&
 sleep 2
@@ -26,6 +29,7 @@ do
 done
 
 # start an http file server for boot/transfer_overlay support
+echo "===== Start python3 http server ($0) ====="
 (cd /var/lib/lava/dispatcher; python3 -m http.server 80) &
 
 # FIXME lava-slave does not run if old pid is present

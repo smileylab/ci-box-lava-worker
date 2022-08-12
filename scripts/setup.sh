@@ -13,11 +13,13 @@ if [ -z "$LAVA_MASTER_URI" ];then
 fi
 
 # Install PXE
+echo "===== Handle PXE grub settings ($0) ====="
 OPWD=$(pwd)
 cd /var/lib/lava/dispatcher/tmp && grub-mknetdir --net-directory=.
 cp /root/grub.cfg /var/lib/lava/dispatcher/tmp/boot/grub/
 cd $OPWD
 
+echo "===== Handle identify ($0) ====="
 lavacli identities add --uri $LAVA_MASTER_BASEURI --token $LAVA_MASTER_TOKEN --username $LAVA_MASTER_USER default
 
 echo "Dynamic slave for $LAVA_MASTER ($LAVA_MASTER_URI)"
@@ -38,6 +40,7 @@ do
 	TIMEOUT=$(($TIMEOUT-$STEP))
 done
 
+echo "===== Handle device types ($0) ====="
 # This directory is used for storing device-types already added
 mkdir -p /root/.lavadocker/
 if [ -e /root/device-types ];then
@@ -60,6 +63,8 @@ if [ $? -ne 0 ];then
 	echo "ERROR: fail to list devices"
 	exit 1
 fi
+
+echo "===== Handle worker and its devices ($0) ====="
 for worker in $(ls /root/devices/)
 do
 	lavacli $LAVACLIOPTS workers list |grep -q $worker
@@ -186,6 +191,7 @@ do
 	done
 done
 
+echo "===== Handle alias for device types ($0) ====="
 for devicetype in $(ls /root/aliases/)
 do
 	lavacli $LAVACLIOPTS device-types aliases list $devicetype > /tmp/device-types-aliases-$devicetype.list
