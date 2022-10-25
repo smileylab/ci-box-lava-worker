@@ -12,7 +12,9 @@ echo "LOGFILE=/var/log/lava-dispatcher/lava-slave.log" >> /etc/lava-dispatcher/l
 
 echo "===== Start tftpd service ($0) ====="
 service tftpd-hpa start || exit 4
-if [ -s /etc/ser2net.conf ];then
+
+echo "===== ser2net service ($0) ====="
+if [ -s /etc/ser2net.yaml ]; then
 	service ser2net start || exit 7
 fi
 

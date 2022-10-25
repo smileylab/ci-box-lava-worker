@@ -75,10 +75,7 @@ apt-get -y -q update && apt-get -y -q --no-install-recommends install cu conmux 
 #
 RUN echo "deb http://deb.debian.org/debian/ sid main" >> /etc/apt/sources.list.d/sid.list && \
 apt-get -y -q update && apt-get -y -q --no-install-recommends install telnet ser2net && rm -rf /var/cache/apk/* && rm /etc/apt/sources.list.d/sid.list
-COPY configs/ser2net.conf /etc
-#COPY configs/ser2net.yaml /etc
-# change default setting of ser2net to read from ser2net.conf
-RUN sed -e 's,ser2net.yaml,ser2net.conf,g' -i /etc/default/ser2net
+COPY configs/ser2net.yaml /etc
 
 #
 # screen (for terminal)
