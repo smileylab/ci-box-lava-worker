@@ -1,8 +1,13 @@
 #!/bin/bash
 
-. /root/setupenv
+CONF_PATH="$(find /etc -type d -name lava-dispatcher | head -1)"
+if [ -z $CONF_PATH -o ! -d $CONF_PATH -o -n "${LAVA_VERSION}" ]; then
+	CONF_PATH="/root"
+fi
 
-if [ ! -e "/root/devices/$(hostname)" ];then
+source ${CONF_PATH}/setupenv
+
+if [ ! -e "${CONF_PATH}/devices/$(hostname)" ];then
 	echo "Static slave setting for $LAVA_MASTER ($LAVA_MASTER_URI)"
 	exit 0
 fi
@@ -12,15 +17,13 @@ if [ -z "$LAVA_MASTER_URI" ];then
 	exit 11
 fi
 
-# Install PXE
-echo "===== Handle PXE grub settings ($0) ====="
-OPWD=$(pwd)
-cd /var/lib/lava/dispatcher/tmp && grub-mknetdir --net-directory=.
-cp /root/grub.cfg /var/lib/lava/dispatcher/tmp/boot/grub/
-cp /root/intel.efi /var/lib/lava/dispatcher/tmp/
-cd $OPWD
+echo "===== ssh key scan for pdu server ($0) ====="
+if ping -c 3 ${LAVA_PDU_SERVER}; then
+	ssh-keygen -f ~/.ssh/known_hosts -R ${LAVA_PDU_SERVER}
+	ssh-keyscan ${LAVA_PDU_SERVER} >> ~/.ssh/known_hosts
+fi
 
-echo "===== Handle identify ($0) ====="
+echo "===== Handle lava identify ($0) ====="
 lavacli identities add --uri $LAVA_MASTER_BASEURI --token $LAVA_MASTER_TOKEN --username $LAVA_MASTER_USER default
 
 echo "Dynamic slave setting for $LAVA_MASTER ($LAVA_MASTER_URI)"
@@ -43,14 +46,14 @@ done
 
 echo "===== Handle device types ($0) ====="
 # This directory is used for storing device-types already added
-mkdir -p /root/.lavadocker/
-if [ -e /root/device-types ];then
-	for i in $(ls /root/device-types/*jinja2)
+mkdir -p ${CONF_PATH}/.lavadocker/
+if [ -e ${CONF_PATH}/device-types ];then
+	for i in $(ls ${CONF_PATH}/device-types/*jinja2)
 	do
 		devicetype=$(basename $i |sed 's,.jinja2,,')
 		echo "Adding custom $devicetype"
 		lavacli $LAVACLIOPTS device-types list || exit $?
-		touch /root/.lavadocker/devicetype-$devicetype
+		touch ${CONF_PATH}/.lavadocker/devicetype-$devicetype
 	done
 fi
 
@@ -65,27 +68,31 @@ if [ $? -ne 0 ];then
 	exit 1
 fi
 
-echo "===== Handle worker and its devices ($0) ====="
-for worker in $(ls /root/devices/)
+echo "===== Handle worker ($0) ====="
+for worker in $(ls ${CONF_PATH}/devices/)
 do
-	lavacli $LAVACLIOPTS workers list |grep -q $worker
+	lavacli $LAVACLIOPTS workers list | grep -q $worker
 	if [ $? -eq 0 ];then
-		echo "Remains of $worker, cleaning it"
+		echo "Remains of $worker on lava-server, cleaning it"
 		/usr/local/bin/retire.sh $LAVA_MASTER_URI $worker
 		#lavacli $LAVACLIOPTS workers update $worker || exit $?
 	else
-		echo "Adding worker $worker"
-		lavacli $LAVACLIOPTS workers add --description "LAVA dispatcher on $(cat /root/phyhostname)" $worker || exit $?
-		# does we ran 2020.09+ and worker need a token
+		echo "Adding worker $worker to lava-server"
+		lavacli $LAVACLIOPTS workers add --description "LAVA dispatcher on $(cat ${CONF_PATH}/phyhostname)" $worker || exit $?
 	fi
-	grep -q "TOKEN" /root/entrypoint.sh
+	# worker need a token because we ran 2020.09+
+	if [ -f ${CONF_PATH}/entrypoint.sh ]; then
+		grep -q "TOKEN" ${CONF_PATH}/entrypoint.sh
+	elif [ -f ${CONF_PATH}/lava-worker ]; then
+		grep -q "TOKEN" ${CONF_PATH}/lava-worker
+	fi
 	if [ $? -eq 0 ];then
 		# This is 2020.09+
 		echo "DEBUG: Worker need a TOKEN"
 		if [ -z "$LAVA_WORKER_TOKEN" ];then
 			echo "DEBUG: get token dynamicly"
 			# Does not work on 2020.09, since token was not added yet in RPC2
-			WTOKEN=$(getworkertoken.py $LAVA_MASTER_URI $worker)
+			WTOKEN=$(python3 /usr/local/bin/getworkertoken.py $LAVA_MASTER_URI $worker)
 			if [ $? -ne 0 ];then
 				echo "ERROR: cannot get WORKER TOKEN"
 				exit 1
@@ -98,10 +105,10 @@ do
 			echo "DEBUG: got token from env"
 			WTOKEN=$LAVA_WORKER_TOKEN
 		fi
-		echo "DEBUG: write token in /var/lib/lava/dispatcher/worker/"
+		echo "DEBUG: write token to /var/lib/lava/dispatcher/worker/token"
 		mkdir -p /var/lib/lava/dispatcher/worker/
 		echo "$WTOKEN" > /var/lib/lava/dispatcher/worker/token
-		# lava worker ran under root
+		# lava worker need to run under root permission
 		chown root:root /var/lib/lava/dispatcher/worker/token
 		chmod 640 /var/lib/lava/dispatcher/worker/token
 		sed -i "s,.*TOKEN.*,TOKEN=\"--token-file /var/lib/lava/dispatcher/worker/token\"," /etc/lava-dispatcher/lava-worker || exit $?
@@ -113,14 +120,15 @@ do
 		echo "DEBUG: Worker does not need a TOKEN"
 	fi
 	if [ ! -z "$LAVA_DISPATCHER_IP" ];then
-		echo "Add dispatcher_ip $LAVA_DISPATCHER_IP to $worker"
-		/usr/local/bin/setdispatcherip.py $LAVA_MASTER_URI $worker $LAVA_DISPATCHER_IP || exit $?
+		echo "Add dispatcher_ip $LAVA_DISPATCHER_IP to $worker on lava-server"
+		python3 /usr/local/bin/setdispatcherip.py $LAVA_MASTER_URI $worker $LAVA_DISPATCHER_IP || exit $?
 	fi
-	for device in $(ls /root/devices/$worker/)
+	echo "===== Handle devices for $worker ($0) ====="
+	for device in $(ls ${CONF_PATH}/devices/$worker/)
 	do
 		devicename=$(echo $device | sed 's,.jinja2,,')
-		devicetype=$(grep -h extends /root/devices/$worker/$device| grep -o '[a-zA-Z0-9_-]*.jinja2' | sed 's,.jinja2,,')
-		if [ -e /root/.lavadocker/devicetype-$devicetype ];then
+		devicetype=$(grep -h extends ${CONF_PATH}/devices/$worker/$device | grep -o '[a-zA-Z0-9_-]*.jinja2' | sed 's,.jinja2,,')
+		if [ -e ${CONF_PATH}/.lavadocker/devicetype-$devicetype ]; then
 			echo "Skip devicetype $devicetype"
 		else
 			echo "Add devicetype $devicetype"
@@ -130,12 +138,12 @@ do
 			else
 				lavacli $LAVACLIOPTS device-types add $devicetype || exit $?
 			fi
-			touch /root/.lavadocker/devicetype-$devicetype
+			touch ${CONF_PATH}/.lavadocker/devicetype-$devicetype
 		fi
 		DEVICE_OPTS=""
-		if [ -e /root/deviceinfo/$devicename ];then
+		if [ -e ${CONF_PATH}/deviceinfo/$devicename ];then
 			echo "Found customization for $devicename"
-			. /root/deviceinfo/$devicename
+			. ${CONF_PATH}/deviceinfo/$devicename
 			if [ ! -z "$DEVICE_USER" ];then
 				echo "DEBUG: give $devicename to $DEVICE_USER"
 				DEVICE_OPTS="$DEVICE_OPTS --user $DEVICE_USER"
@@ -150,11 +158,11 @@ do
 		if [ $? -eq 0 ];then
 			echo "$devicename already present"
 			#verify if present on another worker
-			lavacli $LAVACLIOPTS devices show $devicename |grep ^worker > /tmp/current-worker
+			lavacli $LAVACLIOPTS devices show $devicename | grep ^worker > /tmp/current-worker
 			if [ $? -ne 0 ]; then
 				CURR_WORKER=""
 			else
-				CURR_WORKER=$(cat /tmp/current-worker | sed '^.* ,,')
+				CURR_WORKER=$(cat /tmp/current-worker | sed 's,^.* ,,')
 			fi
 			if [ ! -z "$CURR_WORKER" -a "$CURR_WORKER" != "$worker" ];then
 				echo "ERROR: $devicename already present on another worker $CURR_WORKER"
@@ -177,23 +185,23 @@ do
 			esac
 			lavacli $LAVACLIOPTS devices update --worker $worker --health $DEVICE_HEALTH $DEVICE_OPTS $devicename || exit $?
 			# always reset the device dict in case of update of it
-			lavacli $LAVACLIOPTS devices dict set $devicename /root/devices/$worker/$device || exit $?
+			lavacli $LAVACLIOPTS devices dict set $devicename ${CONF_PATH}/devices/$worker/$device || exit $?
 		else
 			lavacli $LAVACLIOPTS devices add --type $devicetype --worker $worker $DEVICE_OPTS $devicename || exit $?
-			lavacli $LAVACLIOPTS devices dict set $devicename /root/devices/$worker/$device || exit $?
+			lavacli $LAVACLIOPTS devices dict set $devicename ${CONF_PATH}/devices/$worker/$device || exit $?
 		fi
-		if [ -e /root/tags/$devicename ];then
+		if [ -e ${CONF_PATH}/tags/$devicename ];then
 			while read tag
 			do
 				echo "DEBUG: Add tag $tag to $devicename"
 				lavacli $LAVACLIOPTS devices tags add $devicename $tag || exit $?
-			done < /root/tags/$devicename
+			done < ${CONF_PATH}/tags/$devicename
 		fi
 	done
 done
 
 echo "===== Handle alias for device types ($0) ====="
-for devicetype in $(ls /root/aliases/)
+for devicetype in $(ls ${CONF_PATH}/aliases/)
 do
 	lavacli $LAVACLIOPTS device-types aliases list $devicetype > /tmp/device-types-aliases-$devicetype.list
 	while read alias
@@ -206,7 +214,7 @@ do
 		echo "DEBUG: Add alias $alias to $devicetype"
 		lavacli $LAVACLIOPTS device-types aliases add $devicetype $alias || exit $?
 		echo " $alias" >> /tmp/device-types-aliases-$devicetype.list
-	done < /root/aliases/$devicetype
+	done < ${CONF_PATH}/aliases/$devicetype
 done
 
 exit 0

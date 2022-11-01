@@ -11,9 +11,15 @@ echo "LOGFILE=/var/log/lava-dispatcher/lava-slave.log" >> /etc/lava-dispatcher/l
 
 
 echo "===== Start tftpd service ($0) ====="
+# Install iPXE and grub settings
+rm -fr /var/lib/lava/dispatcher/tmp/boot
+mkdir -p /var/lib/lava/dispatcher/tmp
+grub-mknetdir --net-directory=/var/lib/lava/dispatcher/tmp
+cp -f /root/grub.cfg /var/lib/lava/dispatcher/tmp/boot/grub/
+cp -f /root/intel.efi /var/lib/lava/dispatcher/tmp/intel.efi
 service tftpd-hpa start || exit 4
 
-echo "===== ser2net service ($0) ====="
+echo "===== Start ser2net service ($0) ====="
 if [ -s /etc/ser2net.yaml ]; then
 	service ser2net start || exit 7
 fi
