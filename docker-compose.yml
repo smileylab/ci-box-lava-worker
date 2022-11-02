@@ -25,3 +25,14 @@ services:
         extra_packages: lava-coordinator
         pdu_server: 192.168.0.100
     restart: always
+  lava-dispatcher-vm:
+    container_name: lava-dispatcher-vm
+    hostname: worker0
+    build:
+      context: ./
+      args:
+        version: 2022.03
+        tgtplatform: linux/arm64
+        server: lava-server
+        extra_packages: lava-coordinator
+        pdu_server: 192.168.0.100
