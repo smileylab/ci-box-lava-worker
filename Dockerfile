@@ -95,12 +95,12 @@ COPY configs/intel.efi /root/
 
 # copy additional default settings for lava or other packages
 COPY configs/default/* /etc/default/
-# copy phyhostname to be used by setup.sh
+# copy phyhostname to be used by setup-dispatcher.sh
 COPY configs/phyhostname /root/
-# copy setupenv to be sourced by setup.sh
+# copy setupenv to be sourced by setup-dispatcher.sh
 COPY configs/setupenv /root/
-# copy setup.sh script to be called by entrypoint.sh
-COPY scripts/setup.sh .
+# copy setup-dispatcher.sh script to be called by start-dispatcher.sh
+COPY scripts/setup-dispatcher.sh .
 
 # patch any lava patches to lava src code located in python dist-packages
 COPY lava-patch/ /root/lava-patch/
@@ -137,5 +137,5 @@ ENV LAVA_VERSION=${version}
 
 EXPOSE 69/udp 80
 
-CMD /usr/local/bin/start.sh
+CMD /usr/local/bin/start-dispatcher.sh
 

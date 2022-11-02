@@ -1,6 +1,6 @@
 #!/bin/bash
 
-/setup.sh || exit $?
+/setup-dispatcher.sh || exit $?
 
 # Set LAVA Master IP
 if [[ -n "$LAVA_MASTER" ]]; then

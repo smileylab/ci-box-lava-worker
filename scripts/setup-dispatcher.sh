@@ -1,11 +1,11 @@
 #!/bin/bash
 
+. /root/setupenv
+
 if [ ! -e "/root/devices/$(hostname)" ];then
-	echo "Static slave for $LAVA_MASTER"
+	echo "Static slave setting for $LAVA_MASTER ($LAVA_MASTER_URI)"
 	exit 0
 fi
-
-. /root/setupenv
 
 if [ -z "$LAVA_MASTER_URI" ];then
 	echo "ERROR: Missing LAVA_MASTER_URI"
@@ -23,7 +23,7 @@ cd $OPWD
 echo "===== Handle identify ($0) ====="
 lavacli identities add --uri $LAVA_MASTER_BASEURI --token $LAVA_MASTER_TOKEN --username $LAVA_MASTER_USER default
 
-echo "Dynamic slave for $LAVA_MASTER ($LAVA_MASTER_URI)"
+echo "Dynamic slave setting for $LAVA_MASTER ($LAVA_MASTER_URI)"
 LAVACLIOPTS="--uri $LAVA_MASTER_URI"
 
 # do a sort of ping for letting master to be up
