@@ -16,7 +16,7 @@ rm -fr /var/lib/lava/dispatcher/tmp/boot
 mkdir -p /var/lib/lava/dispatcher/tmp
 grub-mknetdir --net-directory=/var/lib/lava/dispatcher/tmp
 cp -f /root/grub.cfg /var/lib/lava/dispatcher/tmp/boot/grub/
-cp -f /root/intel.efi /var/lib/lava/dispatcher/tmp/intel.efi
+cp -f /root/*.efi /var/lib/lava/dispatcher/tmp/
 service tftpd-hpa start || exit 4
 
 echo "===== Start ser2net service ($0) ====="

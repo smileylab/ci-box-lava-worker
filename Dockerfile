@@ -91,7 +91,7 @@ RUN apt-get -y -q install grub-efi-amd64-bin:amd64
 RUN if [ $(uname -m) != amd64 -a $(uname -m) != x86_64 ]; then dpkg --remove architecture amd64 && apt-get update; fi
 COPY configs/grub.cfg /root/
 # intel.efi(iPXE) binary (pre-build by yocto)
-COPY configs/intel.efi /root/
+COPY configs/intel.efi configs/snp.efi configs/snponly.efi /root/
 
 # copy additional default settings for lava or other packages
 COPY configs/default/* /etc/default/

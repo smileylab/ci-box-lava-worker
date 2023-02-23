@@ -121,6 +121,12 @@ if [ -d ./configs ]; then
 	if [ -f ./configs/intel.efi ]; then
 		$BEROOT cp -f ./configs/intel.efi /srv/tftp/intel.efi
 	fi
+	if [ -f ./configs/snp.efi ]; then
+		$BEROOT cp -f ./configs/snp.efi /srv/tftp/snp.efi
+	fi
+	if [ -f ./configs/snponly.efi ]; then
+		$BEROOT cp -f ./configs/snponly.efi /srv/tftp/snponly.efi
+	fi
 
 	################################################################################
 	# network setting for DUT and NAT of Brideged vNICs. *necessary for VM
