@@ -192,6 +192,7 @@ if [ -d ./configs ]; then
 	$BEROOT systemctl restart lava-worker.service
 else
 	echo "No configs for Lava-dispatcher configuration"
+	popd
 	exit 1
 fi
 
